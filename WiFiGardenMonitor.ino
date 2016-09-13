@@ -29,18 +29,19 @@ RH_NRF24 driver(D2, D8);
 // Class to manage message delivery and receipt, using the driver declared above
 RHReliableDatagram manager(driver, SERVER_ADDRESS);
 
-uint8_t data[] = "And hello back to you";
+uint8_t data[] = "ACK";
 // Dont put this on the stack:
 uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
 
 class SensorData {
   public:
-    char station_name[16];
-    uint16_t count1;
-    uint16_t count2;
-    uint32_t count3;
-};
+    char station_name[10];
+    uint16_t val1;
+    uint16_t val2;
 
+};
+float last_battery = 850;
+int last_count = 0;
 
 SensorData sd;
 
@@ -175,6 +176,8 @@ void setup() {
   if (!manager.init())
     Serial.println("NRF204 init failed");
 
+  driver.setRF( RH_NRF24::DataRate250kbps,  RH_NRF24::TransmitPower0dBm);
+
 }
 
 void loop() {
@@ -191,17 +194,15 @@ void loop() {
     Serial.print(from, HEX);
     Serial.print(": ");
     Serial.println(sd.station_name);
-    Serial.println(sd.count1);
-    Serial.println(sd.count2);
-    Serial.println(sd.count3);
-    
-
+    Serial.println(sd.val1);
+    Serial.println(sd.val2);
+    last_count = sd.val1;
+    last_battery = sd.val2;
+    delay(100);
     // Send a reply back to the originator client
     if (!manager.sendtoWait(data, sizeof(data), from))
       Serial.println("sendtoWait failed");
   }
-
-
 
   push_data();
 
@@ -244,6 +245,8 @@ void push_data()
   url += privateKey;
   url += "&temp=";
   url += get_temperature();
+  url += "&voltage=";
+  url += last_battery / 1024.0 * 10.0;
 
   Serial.print("Requesting URL: ");
   Serial.println(url);
@@ -265,7 +268,7 @@ void push_data()
   next_push_time = millis() + PUSH_DATA_FREQUENCY * 1000;
 
 
-
+last_battery = 0;
 
 }
 
@@ -367,8 +370,15 @@ void handle_webserver()
   client.println("<form method='get'> <button type=\"submit\" name=\"but\" value='on'><b>Turn Pump On</b></button>");
   client.println("<button type=\"submit\" name=\"but\" value='off'><b>Turn Pump Off</b></button></form>");
 
+  String lvolt = "<h3>Last voltage from remote sensor is: ";
+  lvolt += last_battery / 1024.0 * 10.0;
+  client.println(lvolt.c_str());
 
-  client.println("<br><img src=\"https://usercontent2.hubstatic.com/7883439.jpg\" alt=\"Robbie\" style=\"width:304px;height:228px;\">");
+ String lcount = "<br>Last count index from remote sensor is: ";
+  lcount += last_count;
+  client.println(lcount.c_str());
+  
+  client.println("</H3><br><img src=\"https://usercontent2.hubstatic.com/7883439.jpg\" alt=\"Robbie\" style=\"width:304px;height:228px;\">");
 
 
   client.println("</html>");
